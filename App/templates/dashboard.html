@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="layout">
+
+    <!-- LEFT SIDE: SUBMISSIONS LIST -->
+    <div class="sidebar">
+        <h3>Available Presentations</h3>
+
+        {% for sub in submissions %}
+        <div class="draggable"
+             draggable="true"
+             data-id="{{ sub.id }}">
+            {{ sub.title }}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- RIGHT SIDE: SCHEDULE -->
+    <div class="schedule">
+
+        <h3>Schedule</h3>
+
+        {% for slot in timeslots %}
+        <div class="timeslot"
+             data-slot="{{ slot }}">
+
+            <h4>{{ slot }}</h4>
+
+            <div class="dropzone">
+                {% if slot in scheduled %}
+                    {{ scheduled[slot].title }}
+                {% endif %}
+            </div>
+
+        </div>
+        {% endfor %}
+
+    </div>
+
+</div>
+
+{% endblock %}
