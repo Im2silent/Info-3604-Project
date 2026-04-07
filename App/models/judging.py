@@ -1,3 +1,5 @@
+from App.database import db
+
 class Judging(db.Model):
     __tablename__ = "judging"
 

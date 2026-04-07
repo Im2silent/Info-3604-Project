@@ -1,3 +1,5 @@
+from App.database import db
+
 class Track(db.Model):
     __tablename__ = "tracks"
 

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
-from app.models.checkin import CheckIn
+from App.models.checkin import CheckIn
 from datetime import datetime
-from app import db
+from App import db
 
 check_bp = Blueprint("checkin", __name__)
 

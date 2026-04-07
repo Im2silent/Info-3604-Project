@@ -1,3 +1,5 @@
+from App.database import db
+
 class PosterBoard(db.Model):
     __tablename__ = "poster_boards"
 

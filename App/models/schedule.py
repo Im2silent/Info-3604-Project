@@ -1,3 +1,5 @@
+from App.database import db
+
 class Schedule(db.Model):
     __tablename__ = "schedules"
 

@@ -1,3 +1,5 @@
+from App.database import db
+
 class PosterAssignment(db.Model):
     __tablename__ = "poster_assignments"
 

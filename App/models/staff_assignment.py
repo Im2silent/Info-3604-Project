@@ -1,3 +1,5 @@
+from App.database import db
+
 class StaffAssignment(db.Model):
     __tablename__ = "staff_assignments"
 

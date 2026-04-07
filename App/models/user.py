@@ -3,7 +3,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from App.database import db
 
 class User(db.Model):
-    __tablename__ = "user"
+    __tablename__ = "users"
     
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(100), nullable=False)
@@ -19,11 +19,6 @@ class User(db.Model):
     profile_picture = db.Column(db.String(256))
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    __mapper_args__ = {
-        "polymorphic_on": type,
-        "polymorphic_identity": "user"
-    }
 
     def __init__(self, first_name, last_name, email, password, role="REGULAR_USER"):
         self.first_name = first_name

@@ -59,8 +59,8 @@ with app.app_context():
 @app.cli.command("init", help="Creates and initializes the database")
 def init():
     initialize()
-    print('Welcome to the Bread Van App!')
-    print("For documentation, visit: https://github.com/LiannMaicoo/Bread_Van_CLI_App")
+    print('Welcome to the Principle Awards Scheduling Platform!')
+    print("For documentation, visit: https://github.com/Im2silent/Info-3604-Project")
 
 
 # User Commands

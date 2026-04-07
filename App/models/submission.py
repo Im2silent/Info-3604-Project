@@ -1,3 +1,5 @@
+from App.database import db
+
 class Submission(db.Model):
     __tablename__ = "submissions"
 
