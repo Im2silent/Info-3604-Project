@@ -3,7 +3,7 @@ class PosterBoard(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
 
-    code = de.Column(db.String(256))
+    code = db.Column(db.String(256))
     #e.g A-1
 
     track_id = db.Column(db.Integer, db.ForeignKey("tracks.id"))
