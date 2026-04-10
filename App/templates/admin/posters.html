@@ -1,0 +1,593 @@
+{% extends "base.html" %}
+{% block title %}Poster Floor Plan Editor{% endblock %}
+{% block page_title %}Poster Presentation Floor Plan Editor{% endblock %}
+
+{% block head %}
+<style>
+/* ---- Tab bar ---- */
+.poster-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:22px; }
+.poster-tab {
+    padding:10px 22px; font-size:14px; font-weight:500; cursor:pointer;
+    background:none; border:none; border-bottom:2px solid transparent;
+    margin-bottom:-2px; color:var(--text-muted); font-family:'DM Sans',sans-serif;
+    transition:all 0.15s; display:flex;align-items:center;gap:6px;
+}
+.poster-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab-badge {
+    background:var(--accent); color:#fff; border-radius:20px;
+    font-size:11px; padding:1px 7px; font-weight:600;
+}
+
+/* ---- Editor layout ---- */
+.editor-layout { display:grid; grid-template-columns:1fr 260px; gap:18px; align-items:start; }
+
+/* ---- Grid canvas ---- */
+.grid-canvas-wrap {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; overflow:auto; padding:16px;
+}
+.grid-canvas {
+    display:grid;
+    gap:3px;
+    width:fit-content;
+}
+.grid-cell {
+    width:52px; height:52px;
+    background:#d0cbc4;
+    border-radius:3px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:9px; font-weight:600; color:rgba(0,0,0,0.35);
+    transition:all 0.12s;
+    position:relative;
+    overflow:hidden;
+    user-select:none;
+}
+.grid-cell:hover { filter:brightness(1.1); }
+.grid-cell.assigned {
+    color:#fff;
+    flex-direction:column;
+    font-size:8px;
+    text-align:center;
+    padding:3px;
+    line-height:1.2;
+}
+.grid-cell.assigned .cell-code { font-size:10px; font-weight:700; margin-bottom:2px; }
+.grid-cell.assigned .cell-title { font-size:7.5px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.grid-cell.selected { outline:3px solid var(--accent2); outline-offset:-2px; }
+.grid-cell.span-cell { display:none; } /* hidden cells absorbed by a spanning board */
+
+.col-headers { display:grid; gap:3px; width:fit-content; margin-bottom:3px; }
+.col-header { width:52px; text-align:center; font-size:10px; font-weight:700; color:var(--text-muted); }
+.row-wrap { display:flex; gap:3px; align-items:center; }
+.row-label { width:18px; font-size:10px; font-weight:700; color:var(--text-muted); text-align:right; flex-shrink:0; margin-right:2px; }
+
+/* ---- Right panel ---- */
+.right-panel { display:flex; flex-direction:column; gap:14px; }
+
+.panel-section { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px; }
+.panel-section h4 { font-size:12px; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:12px; font-weight:600; }
+
+/* Size selector */
+.size-select { display:flex; gap:6px; flex-wrap:wrap; }
+.size-btn {
+    padding:5px 10px; border:1px solid var(--border); border-radius:5px;
+    font-size:12px; cursor:pointer; background:var(--surface);
+    font-family:'DM Sans',sans-serif; transition:all 0.12s;
+}
+.size-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* Color pick */
+.color-swatches { display:flex; gap:6px; flex-wrap:wrap; }
+.color-swatch {
+    width:28px; height:28px; border-radius:50%; cursor:pointer;
+    border:3px solid transparent; transition:all 0.12s;
+}
+.color-swatch.selected { border-color:var(--text); }
+
+/* Poster list */
+.poster-list-item {
+    display:flex; align-items:flex-start; gap:10px;
+    padding:9px 10px; border-radius:6px; cursor:pointer;
+    transition:background 0.12s; font-size:12px;
+    border:1px solid transparent;
+}
+.poster-list-item:hover { background:var(--surface2); }
+.poster-list-item.selected-poster { background:#e8f0f8; border-color:var(--accent); }
+.poster-list-item.already-placed { opacity:0.45; cursor:default; }
+.poster-track-dot { width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:3px; }
+.poster-item-info { flex:1; }
+.poster-item-title { font-weight:600; color:var(--text); line-height:1.3; }
+.poster-item-track { color:var(--text-muted); font-size:11px; margin-top:2px; }
+
+/* Saved boards */
+.saved-board-thumb {
+    width:100%; height:80px; border-radius:6px;
+    border:2px solid var(--border); cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:var(--text-muted);
+    transition:border-color 0.12s;
+}
+.saved-board-thumb:hover { border-color:var(--accent); }
+
+/* Theme tab - colors */
+.theme-item {
+    display:flex;align-items:center;gap:10px;
+    padding:8px 10px; border-radius:6px;
+    font-size:12px; cursor:pointer; transition:background 0.12s;
+}
+.theme-item:hover { background:var(--surface2); }
+.theme-color-dot { width:14px;height:14px;border-radius:50%;flex-shrink:0; }
+.theme-item-name { font-weight:500; color:var(--accent); }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<select id="boardSizeSelect" class="btn-sm btn-outline" style="cursor:pointer;" onchange="changeBoardSize(this.value)">
+    <option value="13x6" {% if cols==13 and rows==6 %}selected{% endif %}>13×6</option>
+    <option value="10x5" {% if cols==10 and rows==5 %}selected{% endif %}>10×5</option>
+    <option value="8x4" {% if cols==8 and rows==4 %}selected{% endif %}>8×4</option>
+</select>
+<button class="btn-sm btn-primary" onclick="saveGrid()">💾 Save Layout</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Tab bar -->
+<div class="poster-tabs">
+    <button class="poster-tab {% if active_tab=='poster' %}active{% endif %}" onclick="switchTab('poster')">
+        Poster <span class="tab-badge">{{ boards | length }}</span>
+    </button>
+    <button class="poster-tab {% if active_tab=='board' %}active{% endif %}" onclick="switchTab('board')">
+        Board <span class="tab-badge">{{ assigned_count }}</span>
+    </button>
+    <button class="poster-tab {% if active_tab=='theme' %}active{% endif %}" onclick="switchTab('theme')">
+        Themes <span class="tab-badge">{{ all_tracks | length }}</span>
+    </button>
+</div>
+
+<!-- POSTER TAB — Select a poster then click grid -->
+<div id="tab-poster" class="tab-content" {% if active_tab!='poster' %}style="display:none"{% endif %}>
+    <div class="editor-layout">
+        <!-- Grid -->
+        <div class="grid-canvas-wrap">
+            <div id="gridColHeaders" class="col-headers"></div>
+            <div id="gridCanvas" class="grid-canvas"></div>
+        </div>
+        <!-- Right panel -->
+        <div class="right-panel">
+            <div class="panel-section">
+                <h4>Board Size (cells)</h4>
+                <div class="size-select" id="sizeSelect">
+                    <button class="size-btn active" data-w="1" data-h="1" onclick="selectSize(1,1,this)">1×1</button>
+                    <button class="size-btn" data-w="2" data-h="1" onclick="selectSize(2,1,this)">2×1</button>
+                    <button class="size-btn" data-w="1" data-h="2" onclick="selectSize(1,2,this)">1×2</button>
+                    <button class="size-btn" data-w="2" data-h="2" onclick="selectSize(2,2,this)">2×2</button>
+                    <button class="size-btn" data-w="3" data-h="1" onclick="selectSize(3,1,this)">3×1</button>
+                    <button class="size-btn" data-w="3" data-h="2" onclick="selectSize(3,2,this)">3×2</button>
+                </div>
+            </div>
+            <div class="panel-section">
+                <h4>Select Poster</h4>
+                <div style="display:flex;flex-direction:column;gap:4px;" id="posterList">
+                    {% for sub in poster_submissions %}
+                    <div class="poster-list-item {% if sub.id in placed_ids %}already-placed{% endif %}"
+                         id="pli-{{ sub.id }}"
+                         onclick="{% if sub.id not in placed_ids %}selectPoster({{ sub.id }},'{{ sub.title|replace("'","\\'")|truncate(40,true,'...') }}','{{ sub.track.color }}'){% endif %}">
+                        <span class="poster-track-dot" style="background:{{ sub.track.color }}"></span>
+                        <div class="poster-item-info">
+                            <div class="poster-item-title">{{ sub.title|truncate(50) }}</div>
+                            <div class="poster-item-track">{{ sub.track.name[:40] }}{% if sub.track.name|length > 40 %}…{% endif %}</div>
+                            {% if sub.id in placed_ids %}<span class="badge badge-green" style="margin-top:3px;">Placed</span>{% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="empty-state" style="padding:20px;">No accepted poster submissions yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="panel-section">
+                <h4>Saved / Pre-Set Boards</h4>
+                <div class="saved-board-thumb" onclick="loadPreset('default')" style="background:#d0cbc4;">
+                    <span>Default 13×6</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- BOARD TAB — Shows existing assignments -->
+<div id="tab-board" class="tab-content" {% if active_tab!='board' %}style="display:none"{% endif %}>
+    <div class="editor-layout">
+        <div class="grid-canvas-wrap">
+            <div id="boardColHeaders" class="col-headers"></div>
+            <div id="boardCanvas" class="grid-canvas"></div>
+        </div>
+        <div class="right-panel">
+            <div class="panel-section">
+                <h4>Assignments ({{ assigned_count }})</h4>
+                {% for a in assignments %}
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border);font-size:12px;">
+                    <span style="font-weight:700;min-width:36px;color:var(--accent)">{{ a.board.code }}</span>
+                    <span style="flex:1;">{{ a.submission.title|truncate(38) }}</span>
+                    <form method="POST" action="/posters/unassign/{{ a.id }}" style="margin:0;">
+                        <button type="submit" style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:13px;" title="Remove">✕</button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="empty-state" style="padding:20px;">No posters placed yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- THEME TAB — Zone paint mode -->
+<div id="tab-theme" class="tab-content" {% if active_tab!='theme' %}style="display:none"{% endif %}>
+    <div class="editor-layout">
+        <div class="grid-canvas-wrap">
+            <div id="themeColHeaders" class="col-headers"></div>
+            <div id="themeCanvas" class="grid-canvas"></div>
+        </div>
+        <div class="right-panel">
+            <div class="panel-section">
+                <h4>Paint Mode</h4>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+                    Select a theme, then click or drag cells on the grid to assign them to that theme.
+                </p>
+                <div id="trackPaintBtns" style="display:flex;flex-direction:column;gap:6px;">
+                    {% for track in all_tracks %}
+                    <button class="paint-track-btn" data-track-id="{{ track.id }}" data-color="{{ track.color }}"
+                            onclick="selectPaintTrack({{ track.id }}, '{{ track.color }}', this)"
+                            style="display:flex;align-items:center;gap:8px;padding:7px 10px;
+                                   border:2px solid transparent;border-radius:6px;
+                                   background:var(--surface2);cursor:pointer;
+                                   font-family:'DM Sans',sans-serif;font-size:12px;
+                                   text-align:left;transition:all 0.12s;">
+                        <span style="width:14px;height:14px;border-radius:50%;background:{{ track.color }};flex-shrink:0;"></span>
+                        <span>{{ track.name[:38] }}{% if track.name|length > 38 %}…{% endif %}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <hr style="margin:12px 0;border-color:var(--border);">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;" id="paintStatus">
+                    No theme selected.
+                </div>
+                <button class="btn-sm btn-primary" id="saveZoneBtn" onclick="saveZone()" disabled
+                        style="width:100%;justify-content:center;">
+                    💾 Save Zone Layout
+                </button>
+                <button class="btn-sm btn-outline" onclick="clearPaintSelection()"
+                        style="width:100%;justify-content:center;margin-top:6px;">
+                    ✕ Clear Selection
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden form for assigning poster to board -->
+<form method="POST" action="/posters/assign" id="assignForm" style="display:none;">
+    <input type="hidden" name="submission_id" id="assign_sub_id">
+    <input type="hidden" name="board_id" id="assign_board_id">
+    <input type="hidden" name="cell_width" id="assign_w">
+    <input type="hidden" name="cell_height" id="assign_h">
+    <input type="hidden" name="color" id="assign_color">
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Data from server ──────────────────────────────────────────
+const COLS = {{ cols }};
+const ROWS = {{ rows }};
+const LETTERS = Array.from({length:COLS}, (_,i)=>String.fromCharCode(65+i));
+const boardsData = {{ boards_json | safe }};  // {code: {id,submission_id,submission_title,color,cell_width,cell_height}}
+
+let selectedPosterId = null;
+let selectedPosterTitle = '';
+let selectedPosterColor = '#2d8a4e';
+let selectedW = 1, selectedH = 1;
+let selectedColor = '{{ all_tracks[0].color if all_tracks else "#2d8a4e" }}';
+
+// ── Build a grid ───────────────────────────────────────────────
+function buildGrid(containerId, headerContainerId, clickable=false) {
+    const headerEl = document.getElementById(headerContainerId);
+    const canvasEl = document.getElementById(containerId);
+    if (!headerEl || !canvasEl) return;
+
+    // Column headers
+    headerEl.style.gridTemplateColumns = `20px repeat(${COLS}, 52px)`;
+    headerEl.innerHTML = '<div></div>' + LETTERS.map(l=>`<div class="col-header">${l}</div>`).join('');
+
+    canvasEl.style.gridTemplateColumns = `20px repeat(${COLS}, 52px)`;
+    canvasEl.innerHTML = '';
+
+    // Track which cells are "absorbed" by a multi-cell board
+    const absorbed = new Set();
+
+    for (let r = 1; r <= ROWS; r++) {
+        canvasEl.innerHTML += `<div class="row-label">${r}</div>`;
+        for (let c = 0; c < COLS; c++) {
+            const code = `${LETTERS[c]}-${r}`;
+            if (absorbed.has(code)) {
+                // placeholder div that takes no visual space (grid still needs it)
+                canvasEl.innerHTML += `<div style="display:none;" data-code="${code}"></div>`;
+                continue;
+            }
+            const b = boardsData[code];
+            const w = b ? (b.cell_width||1) : 1;
+            const h = b ? (b.cell_height||1) : 1;
+
+            // Mark absorbed cells
+            for (let dr=0; dr<h; dr++) for (let dc=0; dc<w; dc++) {
+                if (dr===0 && dc===0) continue;
+                const ar = r+dr, ac = c+dc;
+                if (ar<=ROWS && ac<COLS) absorbed.add(`${LETTERS[ac]}-${ar}`);
+            }
+
+            let style = `grid-column:span ${w}; grid-row:span ${h};`;
+            let extraClass = '';
+            let inner = `<span style="opacity:0.5;">${code}</span>`;
+
+            if (b && b.submission_id) {
+                style += `background:${b.color};`;
+                extraClass = 'assigned';
+                inner = `<span class="cell-code">${code}</span><span class="cell-title">${(b.submission_title||'').substring(0,35)}</span>`;
+            } else if (b) {
+                style += `background:${b.color};`;
+            }
+
+            const onclick = clickable ? `onclick="cellClick('${code}')"` : '';
+            canvasEl.innerHTML += `<div class="grid-cell ${extraClass}" id="cell-${containerId}-${code}" style="${style}" data-code="${code}" ${onclick}>${inner}</div>`;
+        }
+    }
+}
+
+// ── Cell click (poster tab) ───────────────────────────────────
+function cellClick(code) {
+    if (!selectedPosterId) { showToast('Select a poster from the list first'); return; }
+    const b = boardsData[code];
+    if (b && b.submission_id) { showToast('This cell is already occupied'); return; }
+
+    document.getElementById('assign_sub_id').value = selectedPosterId;
+    // Get board id from boardsData or find by code via server
+    document.getElementById('assign_board_id').value = b ? b.id : '';
+    document.getElementById('assign_w').value = selectedW;
+    document.getElementById('assign_h').value = selectedH;
+    document.getElementById('assign_color').value = selectedColor;
+
+    if (!b || !b.id) {
+        showToast('Board spot not found in database');
+        return;
+    }
+
+    if (confirm(`Place "${selectedPosterTitle.substring(0,40)}..." at ${code} (${selectedW}×${selectedH})?`)) {
+        document.getElementById('assignForm').submit();
+    }
+}
+
+// ── Tab switching ─────────────────────────────────────────────
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(t=>t.style.display='none');
+    document.querySelectorAll('.poster-tab').forEach(t=>t.classList.remove('active'));
+    document.getElementById('tab-'+tab).style.display='';
+    document.querySelectorAll('.poster-tab')[['poster','board','theme'].indexOf(tab)].classList.add('active');
+    if (tab==='poster') buildGrid('gridCanvas','gridColHeaders',true);
+    if (tab==='board')  buildGrid('boardCanvas','boardColHeaders',false);
+    if (tab==='theme')  buildThemeGrid();
+}
+
+function selectSize(w,h,btn) {
+    selectedW=w; selectedH=h;
+    document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+function selectPoster(id, title, color) {
+    selectedPosterId = id;
+    selectedPosterTitle = title;
+    selectedColor = color;
+    document.querySelectorAll('.poster-list-item').forEach(el=>el.classList.remove('selected-poster'));
+    const el = document.getElementById('pli-'+id);
+    if (el) el.classList.add('selected-poster');
+    showToast(`Selected: "${title.substring(0,40)}..." — now click a grid cell`);
+}
+
+function selectColor(c, el) {
+    selectedColor = c;
+    document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+    el.classList.add('selected');
+}
+
+function changeBoardSize(val) {
+    window.location.href = '/posters?size='+val+'&tab={{ active_tab }}';
+}
+
+function saveGrid() {
+    showToast('Layout saved!');
+}
+
+function loadPreset(name) {
+    window.location.href = '/posters?size=13x6';
+}
+
+// ── Theme paint mode ──────────────────────────────────────────
+let paintTrackId = null;
+let paintColor = null;
+let isPainting = false;
+let paintedCodes = new Set();
+
+function selectPaintTrack(trackId, color, btn) {
+    paintTrackId = trackId;
+    paintColor = color;
+    document.querySelectorAll('.paint-track-btn').forEach(b => {
+        b.style.borderColor = 'transparent';
+        b.style.background = 'var(--surface2)';
+    });
+    btn.style.borderColor = color;
+    btn.style.background = color + '22';
+    document.getElementById('paintStatus').textContent =
+        `Painting with selected theme. Click or drag cells to assign.`;
+    document.getElementById('saveZoneBtn').disabled = false;
+    buildThemeGrid();
+}
+
+function clearPaintSelection() {
+    paintedCodes.clear();
+    document.getElementById('paintStatus').textContent = 'Selection cleared.';
+    buildThemeGrid();
+}
+
+function buildThemeGrid() {
+    const headerEl = document.getElementById('themeColHeaders');
+    const canvasEl = document.getElementById('themeCanvas');
+    if (!headerEl || !canvasEl) return;
+
+    headerEl.style.gridTemplateColumns = `20px repeat(${COLS}, 52px)`;
+    headerEl.innerHTML = '<div></div>' + LETTERS.map(l=>`<div class="col-header">${l}</div>`).join('');
+
+    canvasEl.style.gridTemplateColumns = `20px repeat(${COLS}, 52px)`;
+    canvasEl.innerHTML = '';
+
+    const absorbed = new Set();
+
+    for (let r = 1; r <= ROWS; r++) {
+        canvasEl.innerHTML += `<div class="row-label">${r}</div>`;
+        for (let c = 0; c < COLS; c++) {
+            const code = `${LETTERS[c]}-${r}`;
+            if (absorbed.has(code)) {
+                canvasEl.innerHTML += `<div style="display:none;" data-code="${code}"></div>`;
+                continue;
+            }
+            const b = boardsData[code];
+            const w = b ? (b.cell_width||1) : 1;
+            const h = b ? (b.cell_height||1) : 1;
+
+            for (let dr=0; dr<h; dr++) for (let dc=0; dc<w; dc++) {
+                if (dr===0 && dc===0) continue;
+                const ar = r+dr, ac = c+dc;
+                if (ar<=ROWS && ac<COLS) absorbed.add(`${LETTERS[ac]}-${ar}`);
+            }
+
+            // Use painted color if this cell is in the current paint set,
+            // otherwise show the current board color from the DB
+            const bgColor = paintedCodes.has(code)
+                ? paintColor
+                : (b ? b.color : '#d0cbc4');
+
+            const isPainted = paintedCodes.has(code);
+            const outline = isPainted ? `outline:3px solid #fff; outline-offset:-3px;` : '';
+
+            canvasEl.innerHTML += `<div class="grid-cell"
+                id="tcell-${code}"
+                style="grid-column:span ${w}; grid-row:span ${h}; background:${bgColor}; cursor:${paintTrackId ? 'crosshair' : 'default'}; ${outline}"
+                data-code="${code}"
+                onmousedown="paintStart('${code}')"
+                onmouseenter="paintMove('${code}')"
+                onmouseup="paintEnd()">
+                <span style="opacity:0.55;font-size:9px;">${code}</span>
+            </div>`;
+        }
+    }
+
+    // Prevent text selection while dragging
+    canvasEl.addEventListener('selectstart', e => e.preventDefault(), {once:false});
+}
+
+function paintStart(code) {
+    if (!paintTrackId) { showToast('Select a theme first'); return; }
+    isPainting = true;
+    togglePaint(code);
+}
+
+function paintMove(code) {
+    if (!isPainting || !paintTrackId) return;
+    togglePaint(code);
+}
+
+function paintEnd() {
+    isPainting = false;
+}
+
+function togglePaint(code) {
+    if (paintedCodes.has(code)) {
+        paintedCodes.delete(code);
+    } else {
+        paintedCodes.add(code);
+    }
+    // Update just this cell's color without a full rebuild for smooth dragging
+    const cell = document.getElementById('tcell-'+code);
+    if (cell) {
+        cell.style.background = paintedCodes.has(code) ? paintColor : (boardsData[code] ? boardsData[code].color : '#d0cbc4');
+        cell.style.outline = paintedCodes.has(code) ? '3px solid #fff' : '';
+        cell.style.outlineOffset = paintedCodes.has(code) ? '-3px' : '';
+    }
+    document.getElementById('paintStatus').textContent =
+        `${paintedCodes.size} cell${paintedCodes.size !== 1 ? 's' : ''} selected.`;
+}
+
+async function saveZone() {
+    if (!paintTrackId || paintedCodes.size === 0) {
+        showToast('Select a theme and paint some cells first');
+        return;
+    }
+    const btn = document.getElementById('saveZoneBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+        const res = await fetch('/posters/paint-zone', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({codes: [...paintedCodes], track_id: paintTrackId})
+        });
+        const json = await res.json();
+        if (res.ok) {
+            // Update local boardsData so the other grids stay in sync
+            json.updated.forEach(code => {
+                if (boardsData[code]) {
+                    boardsData[code].color = json.color;
+                } else {
+                    boardsData[code] = {color: json.color};
+                }
+            });
+            showToast(`Saved — ${json.updated.length} cell(s) assigned to theme`);
+            paintedCodes.clear();
+            buildThemeGrid();
+        } else {
+            showToast('Error: ' + (json.error || 'Save failed'));
+        }
+    } catch(e) {
+        showToast('Network error — could not save');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '💾 Save Zone Layout';
+}
+
+// Stop painting if mouse released outside canvas
+document.addEventListener('mouseup', () => { isPainting = false; });
+
+// ── Init ─────────────────────────────────────────────────────
+buildGrid('gridCanvas','gridColHeaders',true);
+buildGrid('boardCanvas','boardColHeaders',false);
+buildThemeGrid();
+
+// Show only active tab's grid
+{% if active_tab == 'board' %}
+document.getElementById('tab-poster').style.display='none';
+document.getElementById('tab-board').style.display='';
+document.getElementById('tab-theme').style.display='none';
+{% elif active_tab == 'theme' %}
+document.getElementById('tab-poster').style.display='none';
+document.getElementById('tab-board').style.display='none';
+document.getElementById('tab-theme').style.display='';
+{% else %}
+document.getElementById('tab-poster').style.display='';
+document.getElementById('tab-board').style.display='none';
+document.getElementById('tab-theme').style.display='none';
+{% endif %}
+</script>
+{% endblock %}

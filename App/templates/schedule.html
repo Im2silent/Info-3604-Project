@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% block title %}Presentation Scheduler{% endblock %}
+{% block page_title %}Presentation Scheduler{% endblock %}
+
+{% block head %}
+<style>
+.day-tabs { display:flex; gap:0; margin-bottom:24px; border-radius:8px; overflow:hidden; border:1px solid var(--border); width:fit-content; }
+.day-tab { padding:10px 28px; font-size:14px; font-weight:500; cursor:pointer; background:var(--surface); border:none; color:var(--text-muted); transition:all 0.15s; font-family:'DM Sans',sans-serif; }
+.day-tab.active { background:var(--accent); color:#fff; }
+
+.sched-layout { display:grid; grid-template-columns:260px 1fr; gap:20px; align-items:start; }
+
+.unscheduled-panel { background:var(--surface); border:1px solid var(--border); border-radius:8px; position:sticky; top:80px; }
+.unscheduled-panel h4 { font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--text-muted); font-weight:600; padding:14px 14px 0; margin-bottom:10px; }
+.unscheduled-list { padding:0 0 10px; max-height:calc(100vh - 180px); overflow-y:auto; }
+
+.drag-card {
+    margin:0 10px 8px; padding:10px 12px; border-radius:6px;
+    border:1px solid var(--border); background:var(--surface2);
+    cursor:grab; user-select:none; font-size:12px;
+    transition:box-shadow 0.15s, opacity 0.15s;
+}
+.drag-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.14); border-color:var(--accent); }
+.drag-card.dragging { opacity:.35; cursor:grabbing; box-shadow:0 4px 16px rgba(0,0,0,.2); }
+.drag-card-title { font-weight:600; color:var(--text); line-height:1.3; margin-bottom:4px; }
+.drag-card-meta { color:var(--text-muted); font-size:11px; display:flex; align-items:center; gap:5px; margin-top:2px; }
+.drag-card-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+.schedule-grid { border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface); display:grid; grid-template-columns:120px 1fr; }
+.sched-day-col { background:var(--surface2); border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:20px 12px; }
+.sched-day-num { font-size:32px; font-family:'DM Serif Display',serif; color:var(--accent); }
+.sched-day-label { font-family:'DM Serif Display',serif; font-size:13px; text-align:center; line-height:1.4; }
+
+.sessions-col { padding:0; }
+.session-row {
+    display:grid; grid-template-columns:100px 1fr auto;
+    align-items:stretch; border-bottom:1px solid var(--border);
+    transition:background 0.12s;
+}
+.session-row:last-child { border-bottom:none; }
+.session-row.drag-over-row { background:rgba(28,58,94,.06) !important; }
+.session-time { padding:16px 12px; font-size:12px; font-weight:600; color:var(--text-muted); border-right:1px solid var(--border); display:flex; align-items:flex-start; justify-content:flex-end; text-align:right; min-width:100px; }
+.session-info { padding:16px 20px; }
+.session-title { font-size:14px; font-weight:600; color:var(--accent); text-decoration:none; display:block; margin-bottom:6px; cursor:pointer; }
+.session-title:hover { text-decoration:underline; }
+.session-meta { display:flex; flex-wrap:wrap; gap:8px; font-size:12px; color:var(--text-muted); }
+.session-meta span { display:flex; align-items:center; gap:3px; }
+.session-track-bar { width:4px; flex-shrink:0; }
+.session-actions { padding:16px 14px; display:flex; align-items:center; }
+
+.drop-zone {
+    border:2px dashed transparent; border-radius:6px; min-height:56px;
+    margin:8px 10px; display:flex; align-items:center; justify-content:center;
+    font-size:12px; color:var(--text-muted); transition:all 0.15s;
+}
+.drop-zone.drag-over { border-color:var(--accent); background:rgba(28,58,94,.06); color:var(--accent); }
+
+.empty-drop {
+    min-height:160px; border:2px dashed var(--border); border-radius:8px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; padding:30px; transition:all 0.15s; background:var(--surface);
+}
+.empty-drop.drag-over { border-color:var(--accent); background:rgba(28,58,94,.05); }
+.empty-drop .empty-icon { font-size:36px; }
+.empty-drop p { color:var(--text-muted); font-size:14px; }
+
+.config-field-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn-sm btn-primary" onclick="openModal('addSessionModal')">+ Add Session</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="day-tabs">
+    <button class="day-tab {% if active_day == 1 %}active{% endif %}" onclick="switchDay(1)">Day 1 — 26 November</button>
+    <button class="day-tab {% if active_day == 2 %}active{% endif %}" onclick="switchDay(2)">Day 2 — 27 November</button>
+</div>
+
+{% for day_num in [1, 2] %}
+{% set schedules = day1_schedules if day_num == 1 else day2_schedules %}
+<div id="day-{{ day_num }}" class="day-panel" {% if active_day != day_num %}style="display:none"{% endif %}>
+    <div class="sched-layout">
+
+        <!-- Left: draggable unscheduled cards -->
+        <div class="unscheduled-panel">
+            <h4>Unscheduled ({{ unscheduled_oral | length }})</h4>
+            <div class="unscheduled-list">
+                {% for sub in unscheduled_oral %}
+                <div class="drag-card"
+                     draggable="true"
+                     data-sub-id="{{ sub.id }}"
+                     data-track-id="{{ sub.track_id }}"
+                     data-track-color="{{ sub.track.color }}"
+                     id="dc-{{ sub.id }}">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                        <span class="drag-card-dot" style="background:{{ sub.track.color }}"></span>
+                        <span class="drag-card-title">{{ sub.title | truncate(50) }}</span>
+                    </div>
+                    <div class="drag-card-meta">{{ sub.track.name[:35] }}{% if sub.track.name|length > 35 %}…{% endif %}</div>
+                    <div class="drag-card-meta">👤 {{ sub.author.first_name }} {{ sub.author.last_name }}</div>
+                </div>
+                {% else %}
+                <div style="padding:16px;font-size:12px;color:var(--text-muted);text-align:center;">All presentations scheduled ✓</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right: schedule -->
+        <div>
+            {% if schedules %}
+            <div class="schedule-grid">
+                <div class="sched-day-col">
+                    <div class="sched-day-num">{{ '26' if day_num == 1 else '27' }}</div>
+                    <div class="sched-day-label">November<br>2025</div>
+                </div>
+                <div class="sessions-col">
+                    {% for s in schedules %}
+                    <div class="session-row" data-searchable
+                         ondragover="event.preventDefault(); this.classList.add('drag-over-row');"
+                         ondragleave="this.classList.remove('drag-over-row');"
+                         ondrop="rowDrop(event, {{ day_num }})">
+                        <div class="session-time">{{ s.start_time.strftime('%I:%M %p') }}<br>–<br>{{ s.end_time.strftime('%I:%M %p') }}</div>
+                        <div style="display:flex;flex:1;">
+                            <div class="session-track-bar" style="background:{{ s.track.color }}"></div>
+                            <div class="session-info">
+                                <a class="session-title" onclick="openConfigModal({{ s.id }})">{{ s.submission.title }}</a>
+                                <div class="session-meta">
+                                    <span>🏛 {{ s.room }}</span>
+                                    <span style="color:{{ s.track.color }}">● {{ s.track.name[:45] }}{% if s.track.name|length > 45 %}…{% endif %}</span>
+                                    <span>👤 {{ s.submission.author.first_name }} {{ s.submission.author.last_name }}</span>
+                                    {% for sa in s.staff_assignments %}
+                                    <span>{{ '🎙' if sa.role == 'TECH' else '🚶' }} {{ sa.staff.first_name }} {{ sa.staff.last_name }} ({{ sa.role }})</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="session-actions">
+                            <button class="btn-sm btn-outline" onclick="openConfigModal({{ s.id }})">Configure</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <div class="drop-zone"
+                         ondragover="event.preventDefault(); this.classList.add('drag-over');"
+                         ondragleave="this.classList.remove('drag-over');"
+                         ondrop="dropZoneDrop(event, {{ day_num }})">
+                        ＋ Drop to add to Day {{ day_num }}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-drop"
+                 ondragover="event.preventDefault(); this.classList.add('drag-over');"
+                 ondragleave="this.classList.remove('drag-over');"
+                 ondrop="dropZoneDrop(event, {{ day_num }})">
+                <div class="empty-icon">📅</div>
+                <p>Drag a presentation here, or</p>
+                <button class="btn-sm btn-primary" onclick="openModal('addSessionModal')">+ Add Session</button>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endfor %}
+
+<!-- ADD SESSION MODAL -->
+<div class="modal-overlay" id="addSessionModal">
+    <div class="modal" style="width:580px;">
+        <div class="modal-header">
+            <h3>Schedule Session</h3>
+            <button class="modal-close" onclick="closeModal('addSessionModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="/schedule/add">
+                <div class="config-field-row">
+                    <div class="form-group">
+                        <label>Day</label>
+                        <select name="day" id="add_day" required>
+                            <option value="1">Day 1 — 26 November</option>
+                            <option value="2">Day 2 — 27 November</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Presentation (Oral, Accepted)</label>
+                        <select name="submission_id" id="add_sub_id" required>
+                            <option value="">Select submission...</option>
+                            {% for sub in unscheduled_oral %}
+                            <option value="{{ sub.id }}">{{ sub.title[:50] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="config-field-row">
+                    <div class="form-group"><label>Start Time</label><input type="time" name="start_time" id="add_start" value="09:00" required></div>
+                    <div class="form-group"><label>End Time</label><input type="time" name="end_time" id="add_end" value="09:30" required></div>
+                </div>
+                <div class="config-field-row">
+                    <div class="form-group">
+                        <label>Room</label>
+                        <select name="room" required>{% for room in rooms %}<option>{{ room }}</option>{% endfor %}</select>
+                    </div>
+                    <div class="form-group">
+                        <label>Track</label>
+                        <select name="track_id" id="add_track" required>
+                            {% for track in all_tracks %}<option value="{{ track.id }}">{{ track.name[:40] }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="config-field-row">
+                    <div class="form-group">
+                        <label>Tech Staff</label>
+                        <select name="tech_staff_id"><option value="">None</option>{% for u in tech_staff %}<option value="{{ u.id }}">{{ u.first_name }} {{ u.last_name }}</option>{% endfor %}</select>
+                    </div>
+                    <div class="form-group">
+                        <label>Usher</label>
+                        <select name="usher_id"><option value="">None</option>{% for u in ushers %}<option value="{{ u.id }}">{{ u.first_name }} {{ u.last_name }}</option>{% endfor %}</select>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:0;border:none;margin-top:6px;">
+                    <button type="button" class="btn-sm btn-outline" onclick="closeModal('addSessionModal')">Cancel</button>
+                    <button type="submit" class="btn-sm btn-primary">Confirm</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- CONFIGURE EXISTING SESSION MODAL -->
+<div class="modal-overlay" id="configSessionModal">
+    <div class="modal" style="width:580px;">
+        <div class="modal-header">
+            <h3>Edit Session</h3>
+            <button class="modal-close" onclick="closeModal('configSessionModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <form method="POST" action="/schedule/update" id="configForm">
+                <input type="hidden" name="schedule_id" id="cfg_schedule_id">
+                <div class="config-field-row">
+                    <div class="form-group"><label>Start Time</label><input type="time" name="start_time" id="cfg_start" required></div>
+                    <div class="form-group"><label>End Time</label><input type="time" name="end_time" id="cfg_end" required></div>
+                </div>
+                <div class="config-field-row">
+                    <div class="form-group">
+                        <label>Room</label>
+                        <select name="room" id="cfg_room">{% for room in rooms %}<option>{{ room }}</option>{% endfor %}</select>
+                    </div>
+                    <div class="form-group">
+                        <label>Track</label>
+                        <select name="track_id" id="cfg_track">{% for track in all_tracks %}<option value="{{ track.id }}">{{ track.name[:40] }}</option>{% endfor %}</select>
+                    </div>
+                </div>
+                <div class="config-field-row">
+                    <div class="form-group">
+                        <label>Tech Staff</label>
+                        <select name="tech_staff_id" id="cfg_tech"><option value="">None</option>{% for u in tech_staff %}<option value="{{ u.id }}">{{ u.first_name }} {{ u.last_name }}</option>{% endfor %}</select>
+                    </div>
+                    <div class="form-group">
+                        <label>Usher</label>
+                        <select name="usher_id" id="cfg_usher"><option value="">None</option>{% for u in ushers %}<option value="{{ u.id }}">{{ u.first_name }} {{ u.last_name }}</option>{% endfor %}</select>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:0;border:none;margin-top:6px;">
+                    <button type="button" class="btn-sm btn-danger" id="cfg_delete_btn">Delete Session</button>
+                    <button type="button" class="btn-sm btn-outline" onclick="closeModal('configSessionModal')">Cancel</button>
+                    <button type="submit" class="btn-sm btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const scheduleData = {{ schedule_data_json | safe }};
+
+let dragSubId   = null;
+let dragTrackId = null;
+
+// ── Wire up drag events on all cards ────────────────────────
+document.querySelectorAll('.drag-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+        dragSubId   = card.dataset.subId;
+        dragTrackId = card.dataset.trackId;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragSubId);
+        setTimeout(() => card.classList.add('dragging'), 0);
+    });
+    card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+    });
+});
+
+// ── Dropping onto an existing session row ────────────────────
+function rowDrop(e, day) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over-row');
+    if (!dragSubId) return;
+    prefillAndOpen(day);
+}
+
+// ── Dropping onto bottom drop-zone or empty day ──────────────
+function dropZoneDrop(e, day) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    if (!dragSubId) return;
+    prefillAndOpen(day);
+}
+
+// ── Pre-fill the Add Session modal ──────────────────────────
+function prefillAndOpen(day) {
+    document.getElementById('add_day').value    = day;
+    document.getElementById('add_sub_id').value = dragSubId;
+    if (dragTrackId) document.getElementById('add_track').value = dragTrackId;
+    openModal('addSessionModal');
+}
+
+// ── Day tab switching ────────────────────────────────────────
+function switchDay(day) {
+    document.querySelectorAll('.day-panel').forEach(p => p.style.display='none');
+    document.querySelectorAll('.day-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('day-'+day).style.display='';
+    document.querySelectorAll('.day-tab')[day-1].classList.add('active');
+}
+
+// ── Edit session modal ───────────────────────────────────────
+function openConfigModal(scheduleId) {
+    const s = scheduleData[scheduleId];
+    if (!s) return;
+    document.getElementById('cfg_schedule_id').value = scheduleId;
+    document.getElementById('cfg_start').value  = s.start_time;
+    document.getElementById('cfg_end').value    = s.end_time;
+    document.getElementById('cfg_room').value   = s.room;
+    document.getElementById('cfg_track').value  = s.track_id;
+    document.getElementById('cfg_tech').value   = s.tech_staff_id || '';
+    document.getElementById('cfg_usher').value  = s.usher_id || '';
+    document.getElementById('cfg_delete_btn').onclick = () => {
+        if (confirm('Delete this session?')) {
+            fetch('/schedule/delete/'+scheduleId, {method:'POST'}).then(()=>location.reload());
+        }
+    };
+    openModal('configSessionModal');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Participant Check-In{% endblock %}
+{% block page_title %}Participant Check-In{% endblock %}
+
+{% block head %}
+<style>
+.checkin-layout { display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start; }
+.sessions-list { display:flex; flex-direction:column; gap:0; }
+.session-entry {
+    display:grid; grid-template-columns:100px 1fr;
+    border-bottom:1px solid var(--border);
+    transition:background 0.12s;
+}
+.session-entry:last-child { border-bottom:none; }
+.entry-time { padding:16px 12px; font-size:12px; font-weight:600; color:var(--text-muted);
+    border-right:1px solid var(--border); text-align:right; }
+.entry-info { padding:16px 20px; }
+.entry-title { font-size:14px; font-weight:600; color:var(--accent); margin-bottom:6px; }
+.entry-meta { font-size:12px; color:var(--text-muted); display:flex; gap:12px; flex-wrap:wrap; }
+.entry-subs { margin-top:10px; display:flex; flex-direction:column; gap:4px; }
+.sub-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 10px; border-radius:5px; background:var(--surface2);
+    font-size:12px;
+}
+.sub-name { font-weight:500; }
+.checkin-btn {
+    padding:4px 12px; border:none; border-radius:4px; font-size:11px;
+    cursor:pointer; font-family:'DM Sans',sans-serif; font-weight:600;
+    transition:all 0.12s;
+}
+.checkin-btn.checked { background:#d4edda; color:#155724; }
+.checkin-btn.unchecked { background:var(--accent); color:#fff; }
+.checkin-btn.unchecked:hover { background:#152d4a; }
+
+/* Right panel */
+.stats-card { margin-bottom:14px; }
+.stat-row { display:flex; justify-content:space-between; align-items:center;
+    padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.stat-row:last-child { border-bottom:none; }
+.stat-num { font-weight:700; font-size:18px; color:var(--accent); }
+.search-checkin { width:100%; padding:9px 12px; border:1px solid var(--border);
+    border-radius:6px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; }
+.search-checkin:focus { border-color:var(--accent); }
+
+.manual-checkin-list { max-height:320px; overflow-y:auto; }
+.person-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 4px; border-bottom:1px solid var(--border); font-size:12px;
+}
+.person-row:last-child { border-bottom:none; }
+.person-name { font-weight:500; }
+.person-role { color:var(--text-muted); font-size:11px; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div style="font-size:13px;color:var(--text-muted);">
+    📅 <strong>{{ today }}</strong>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="checkin-layout">
+    <!-- Left: schedule sessions with per-participant checkin -->
+    <div>
+        {% if active_day_schedules %}
+        <div class="card">
+            <div class="card-header">
+                <h3>Day 1 — 26 November Sessions</h3>
+                <a href="/checkin?day=2" style="font-size:13px;color:var(--accent);text-decoration:none;">View Day 2 →</a>
+            </div>
+            <div class="sessions-list">
+                {% for s in active_day_schedules %}
+                <div class="session-entry" data-searchable>
+                    <div class="entry-time">
+                        {{ s.start_time.strftime('%I:%M %p') }}<br>–<br>{{ s.end_time.strftime('%I:%M %p') }}
+                    </div>
+                    <div class="entry-info">
+                        <div class="entry-title">{{ s.submission.title }}</div>
+                        <div class="entry-meta">
+                            <span>🏛 {{ s.room }}</span>
+                            <span style="color:{{ s.track.color }}">● {{ s.track.name[:35] }}{% if s.track.name|length > 35 %}…{% endif %}</span>
+                        </div>
+                        <div class="entry-subs">
+                            <!-- Author / presenter check-in -->
+                            {% set author = s.submission.author %}
+                            {% set is_checked = author.id in checked_in_ids %}
+                            <div class="sub-row">
+                                <div>
+                                    <span class="sub-name">{{ author.first_name }} {{ author.last_name }}</span>
+                                    <span class="badge badge-blue" style="margin-left:6px;">Presenter</span>
+                                </div>
+                                <form method="POST" action="/checkin/do" style="margin:0;">
+                                    <input type="hidden" name="user_id" value="{{ author.id }}">
+                                    <button type="submit" class="checkin-btn {% if is_checked %}checked{% else %}unchecked{% endif %}">
+                                        {% if is_checked %}✓ Checked In{% else %}Check In{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                            <!-- Staff check-ins -->
+                            {% for sa in s.staff_assignments %}
+                            {% set is_staff_checked = sa.staff_id in checked_in_ids %}
+                            <div class="sub-row">
+                                <div>
+                                    <span class="sub-name">{{ sa.staff.first_name }} {{ sa.staff.last_name }}</span>
+                                    <span class="badge {% if sa.role=='TECH' %}badge-blue{% else %}badge-gold{% endif %}" style="margin-left:6px;">{{ sa.role }}</span>
+                                </div>
+                                <form method="POST" action="/checkin/do" style="margin:0;">
+                                    <input type="hidden" name="user_id" value="{{ sa.staff_id }}">
+                                    <button type="submit" class="checkin-btn {% if is_staff_checked %}checked{% else %}unchecked{% endif %}">
+                                        {% if is_staff_checked %}✓ Checked In{% else %}Check In{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                No sessions scheduled. <a href="/schedule">Go to Scheduler →</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right: stats + manual checkin -->
+    <div>
+        <div class="card stats-card">
+            <div class="card-header"><h3>Today's Stats</h3></div>
+            <div class="card-body">
+                <div class="stat-row">
+                    <span>Checked In</span>
+                    <span class="stat-num" style="color:#2d8a4e;">{{ checkin_count }}</span>
+                </div>
+                <div class="stat-row">
+                    <span>Expected</span>
+                    <span class="stat-num">{{ total_participants }}</span>
+                </div>
+                <div class="stat-row">
+                    <span>Pending</span>
+                    <span class="stat-num" style="color:#c0392b;">{{ total_participants - checkin_count }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h3>Manual Check-In</h3></div>
+            <div class="card-body">
+                <input class="search-checkin" placeholder="Search by name..." oninput="filterPeople(this.value)">
+                <div class="manual-checkin-list" id="personList">
+                    {% for user in all_users %}
+                    <div class="person-row" data-name="{{ user.first_name }} {{ user.last_name }}">
+                        <div>
+                            <div class="person-name">{{ user.first_name }} {{ user.last_name }}</div>
+                            <div class="person-role">{{ user.role }}</div>
+                        </div>
+                        <form method="POST" action="/checkin/do" style="margin:0;">
+                            <input type="hidden" name="user_id" value="{{ user.id }}">
+                            {% set is_checked = user.id in checked_in_ids %}
+                            <button type="submit" class="checkin-btn {% if is_checked %}checked{% else %}unchecked{% endif %}" style="font-size:10px;">
+                                {% if is_checked %}✓ In{% else %}Check In{% endif %}
+                            </button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterPeople(q) {
+    q = q.toLowerCase();
+    document.querySelectorAll('.person-row').forEach(row => {
+        row.style.display = row.dataset.name.toLowerCase().includes(q) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

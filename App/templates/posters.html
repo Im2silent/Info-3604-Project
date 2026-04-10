@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% block title %}Poster Floor Plan Editor{% endblock %}
+{% block page_title %}Poster Presentation Floor Plan{% endblock %}
+
+{% block head %}
+<style>
+/* ── Tabs ── */
+.poster-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:22px; }
+.poster-tab { padding:10px 22px; font-size:14px; font-weight:500; cursor:pointer; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-muted); font-family:'DM Sans',sans-serif; transition:all 0.15s; display:flex;align-items:center;gap:6px; }
+.poster-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab-badge { background:var(--accent); color:#fff; border-radius:20px; font-size:11px; padding:1px 7px; font-weight:600; }
+
+/* ── Layout ── */
+.editor-layout { display:grid; grid-template-columns:1fr 270px; gap:18px; align-items:start; }
+
+/* ── Grid canvas ── */
+.grid-canvas-wrap { background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:auto; padding:16px; }
+.grid-canvas { display:grid; gap:4px; width:fit-content; }
+
+.grid-cell {
+    width:58px; height:58px; border-radius:4px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:9px; font-weight:600; color:rgba(0,0,0,0.4);
+    transition:filter 0.12s, outline 0.1s; position:relative; overflow:hidden; user-select:none;
+    border:1px solid rgba(0,0,0,0.08);
+}
+.grid-cell:hover { filter:brightness(1.1); }
+.grid-cell.drag-over-cell { outline:3px solid var(--accent2); outline-offset:-2px; filter:brightness(1.15); }
+.grid-cell.assigned {
+    color:#fff; flex-direction:column; font-size:7.5px; text-align:center;
+    padding:4px; line-height:1.2;
+}
+.grid-cell.assigned .cell-code { font-size:10px; font-weight:700; margin-bottom:2px; opacity:.85; }
+.grid-cell.assigned .cell-title { font-size:7px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+
+/* Assigned cells get a subtle diagonal stripe overlay for texture */
+.grid-cell.assigned::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:repeating-linear-gradient(135deg, rgba(255,255,255,.06) 0px, rgba(255,255,255,.06) 2px, transparent 2px, transparent 8px);
+}
+
+.col-headers { display:grid; gap:4px; width:fit-content; margin-bottom:4px; }
+.col-header { width:58px; text-align:center; font-size:10px; font-weight:700; color:var(--text-muted); }
+.row-label { width:20px; font-size:10px; font-weight:700; color:var(--text-muted); text-align:right; flex-shrink:0; margin-right:3px; }
+
+/* ── Right panel ── */
+.right-panel { display:flex; flex-direction:column; gap:14px; }
+.panel-section { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px; }
+.panel-section h4 { font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--text-muted); margin-bottom:12px; font-weight:600; }
+
+/* Size selector */
+.size-btn { padding:5px 10px; border:1px solid var(--border); border-radius:5px; font-size:12px; cursor:pointer; background:var(--surface); font-family:'DM Sans',sans-serif; transition:all 0.12s; }
+.size-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* ── Draggable poster cards in sidebar ── */
+.poster-drag-card {
+    display:flex; align-items:flex-start; gap:9px; padding:8px 10px;
+    border-radius:6px; cursor:grab; user-select:none; font-size:11px;
+    border:1px solid var(--border); background:var(--surface2);
+    margin-bottom:6px; transition:box-shadow 0.15s, opacity 0.15s;
+}
+.poster-drag-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.12); }
+.poster-drag-card.dragging { opacity:.35; cursor:grabbing; }
+.poster-drag-card.placed { opacity:.4; cursor:default; pointer-events:none; }
+.poster-track-swatch {
+    width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:2px;
+}
+.poster-card-title { font-weight:600; color:var(--text); line-height:1.3; margin-bottom:2px; }
+.poster-card-track { color:var(--text-muted); font-size:10px; }
+
+/* ── Colour-scheme legend ── */
+.legend-row { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:12px; }
+.legend-swatch { width:14px; height:14px; border-radius:3px; flex-shrink:0; }
+
+/* ── Assignments list ── */
+.assign-row { display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border);font-size:12px; }
+.assign-row:last-child { border-bottom:none; }
+.assign-code { font-weight:700; min-width:36px; color:var(--accent); }
+
+/* ── Theme paint ── */
+.paint-track-btn { display:flex;align-items:center;gap:8px;padding:7px 10px; border:2px solid transparent;border-radius:6px; background:var(--surface2);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;text-align:left;transition:all 0.12s;width:100%;margin-bottom:4px; }
+.paint-track-btn.active-paint { font-weight:600; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<select class="btn-sm btn-outline" style="cursor:pointer;" onchange="changeBoardSize(this.value)">
+    <option value="13x6" {% if cols==13 and rows==6 %}selected{% endif %}>13×6</option>
+    <option value="10x5" {% if cols==10 and rows==5 %}selected{% endif %}>10×5</option>
+    <option value="8x4"  {% if cols==8  and rows==4 %}selected{% endif %}>8×4</option>
+</select>
+{% endblock %}
+
+{% block content %}
+
+<div class="poster-tabs">
+    <button class="poster-tab {% if active_tab=='poster' %}active{% endif %}" onclick="switchTab('poster')">
+        Assign <span class="tab-badge">{{ boards | length }}</span>
+    </button>
+    <button class="poster-tab {% if active_tab=='board' %}active{% endif %}" onclick="switchTab('board')">
+        Placed <span class="tab-badge">{{ assigned_count }}</span>
+    </button>
+    <button class="poster-tab {% if active_tab=='theme' %}active{% endif %}" onclick="switchTab('theme')">
+        Zones <span class="tab-badge">{{ all_tracks | length }}</span>
+    </button>
+</div>
+
+<!-- ══ ASSIGN TAB ══ -->
+<div id="tab-poster" class="tab-content" {% if active_tab!='poster' %}style="display:none"{% endif %}>
+    <div class="editor-layout">
+        <div class="grid-canvas-wrap">
+            <div id="gridColHeaders" class="col-headers"></div>
+            <div id="gridCanvas"     class="grid-canvas"></div>
+        </div>
+        <div class="right-panel">
+            <div class="panel-section">
+                <h4>Board Size</h4>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="size-btn active" onclick="selectSize(1,1,this)">1×1</button>
+                    <button class="size-btn"        onclick="selectSize(2,1,this)">2×1</button>
+                    <button class="size-btn"        onclick="selectSize(1,2,this)">1×2</button>
+                    <button class="size-btn"        onclick="selectSize(2,2,this)">2×2</button>
+                    <button class="size-btn"        onclick="selectSize(3,1,this)">3×1</button>
+                    <button class="size-btn"        onclick="selectSize(3,2,this)">3×2</button>
+                </div>
+            </div>
+            <div class="panel-section">
+                <h4>Colour Scheme</h4>
+                {% for track in all_tracks %}
+                <div class="legend-row">
+                    <span class="legend-swatch" style="background:{{ track.color }}"></span>
+                    <span style="color:var(--text-muted);font-size:11px;">{{ track.name[:38] }}{% if track.name|length > 38 %}…{% endif %}</span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="panel-section" style="flex:1;">
+                <h4>Drag a Poster → Grid</h4>
+                <div id="posterDragList" style="max-height:340px;overflow-y:auto;">
+                    {% for sub in poster_submissions %}
+                    <div class="poster-drag-card {% if sub.id in placed_ids %}placed{% endif %}"
+                         draggable="{{ 'false' if sub.id in placed_ids else 'true' }}"
+                         data-sub-id="{{ sub.id }}"
+                         data-color="{{ sub.track.color }}"
+                         data-title="{{ sub.title | replace('"','&quot;') }}"
+                         id="pdc-{{ sub.id }}">
+                        <span class="poster-track-swatch" style="background:{{ sub.track.color }}"></span>
+                        <div>
+                            <div class="poster-card-title">{{ sub.title | truncate(48) }}</div>
+                            <div class="poster-card-track">{{ sub.track.name[:38] }}{% if sub.track.name|length > 38 %}…{% endif %}</div>
+                            {% if sub.id in placed_ids %}<span class="badge badge-green" style="margin-top:3px;font-size:10px;">Placed</span>{% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div style="padding:20px;text-align:center;font-size:12px;color:var(--text-muted);">No accepted poster submissions.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ PLACED TAB ══ -->
+<div id="tab-board" class="tab-content" {% if active_tab!='board' %}style="display:none"{% endif %}>
+    <div class="editor-layout">
+        <div class="grid-canvas-wrap">
+            <div id="boardColHeaders" class="col-headers"></div>
+            <div id="boardCanvas"     class="grid-canvas"></div>
+        </div>
+        <div class="right-panel">
+            <div class="panel-section">
+                <h4>Assignments ({{ assigned_count }})</h4>
+                {% for a in assignments %}
+                <div class="assign-row">
+                    <span class="assign-code">{{ a.board.code }}</span>
+                    <span style="flex:1;">{{ a.submission.title | truncate(36) }}</span>
+                    <form method="POST" action="/posters/unassign/{{ a.id }}" style="margin:0;">
+                        <button type="submit" style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:13px;" title="Remove">✕</button>
+                    </form>
+                </div>
+                {% else %}
+                <div style="padding:20px;text-align:center;font-size:12px;color:var(--text-muted);">No posters placed yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ ZONES / THEME TAB ══ -->
+<div id="tab-theme" class="tab-content" {% if active_tab!='theme' %}style="display:none"{% endif %}>
+    <div class="editor-layout">
+        <div class="grid-canvas-wrap">
+            <div id="themeColHeaders" class="col-headers"></div>
+            <div id="themeCanvas"     class="grid-canvas"></div>
+        </div>
+        <div class="right-panel">
+            <div class="panel-section">
+                <h4>Paint Zones</h4>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Select a theme then click or drag cells to assign.</p>
+                <div id="paintTrackBtns">
+                    {% for track in all_tracks %}
+                    <button class="paint-track-btn" data-track-id="{{ track.id }}" data-color="{{ track.color }}"
+                            onclick="selectPaintTrack({{ track.id }},'{{ track.color }}',this)">
+                        <span style="width:12px;height:12px;border-radius:50%;background:{{ track.color }};flex-shrink:0;"></span>
+                        {{ track.name[:36] }}{% if track.name|length > 36 %}…{% endif %}
+                    </button>
+                    {% endfor %}
+                </div>
+                <hr style="margin:12px 0;border-color:var(--border);">
+                <div id="paintStatus" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">No theme selected.</div>
+                <button class="btn-sm btn-primary" id="saveZoneBtn" onclick="saveZone()" disabled style="width:100%;justify-content:center;">💾 Save Zones</button>
+                <button class="btn-sm btn-outline" onclick="clearPaint()" style="width:100%;justify-content:center;margin-top:6px;">✕ Clear Selection</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden assign form -->
+<form method="POST" action="/posters/assign" id="assignForm" style="display:none;">
+    <input type="hidden" name="submission_id" id="assign_sub_id">
+    <input type="hidden" name="board_id"      id="assign_board_id">
+    <input type="hidden" name="cell_width"    id="assign_w">
+    <input type="hidden" name="cell_height"   id="assign_h">
+    <input type="hidden" name="color"         id="assign_color">
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COLS = {{ cols }};
+const ROWS = {{ rows }};
+const LETTERS = Array.from({length:COLS}, (_,i) => String.fromCharCode(65+i));
+const boardsData = {{ boards_json | safe }};
+
+let selectedW = 1, selectedH = 1;
+
+// ── Drag state ───────────────────────────────────────────────
+let dragSubId    = null;
+let dragSubColor = null;
+let dragSubTitle = null;
+
+document.querySelectorAll('.poster-drag-card:not(.placed)').forEach(card => {
+    card.addEventListener('dragstart', e => {
+        dragSubId    = card.dataset.subId;
+        dragSubColor = card.dataset.color;
+        dragSubTitle = card.dataset.title;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragSubId);
+        setTimeout(() => card.classList.add('dragging'), 0);
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+});
+
+// ── Build regular grid (assign / placed tabs) ────────────────
+function buildGrid(containerId, headerContainerId, droppable=false) {
+    const hdr = document.getElementById(headerContainerId);
+    const cvs = document.getElementById(containerId);
+    if (!hdr || !cvs) return;
+
+    hdr.style.gridTemplateColumns = `22px repeat(${COLS}, 58px)`;
+    hdr.innerHTML = '<div></div>' + LETTERS.map(l=>`<div class="col-header">${l}</div>`).join('');
+
+    cvs.style.gridTemplateColumns = `22px repeat(${COLS}, 58px)`;
+    cvs.innerHTML = '';
+
+    const absorbed = new Set();
+
+    for (let r = 1; r <= ROWS; r++) {
+        cvs.innerHTML += `<div class="row-label">${r}</div>`;
+        for (let c = 0; c < COLS; c++) {
+            const code = `${LETTERS[c]}-${r}`;
+            if (absorbed.has(code)) { cvs.innerHTML += `<div style="display:none;" data-code="${code}"></div>`; continue; }
+
+            const b = boardsData[code];
+            const w = b ? (b.cell_width||1)  : 1;
+            const h = b ? (b.cell_height||1) : 1;
+
+            for (let dr=0; dr<h; dr++) for (let dc=0; dc<w; dc++) {
+                if (dr===0 && dc===0) continue;
+                const ar=r+dr, ac=c+dc;
+                if (ar<=ROWS && ac<COLS) absorbed.add(`${LETTERS[ac]}-${ar}`);
+            }
+
+            let style = `grid-column:span ${w}; grid-row:span ${h};`;
+            let cls   = 'grid-cell';
+            let inner = `<span style="opacity:0.4;">${code}</span>`;
+
+            if (b && b.submission_id) {
+                style += `background:${b.color};`;
+                cls   += ' assigned';
+                inner  = `<span class="cell-code">${code}</span><span class="cell-title">${(b.submission_title||'').substring(0,32)}</span>`;
+            } else if (b) {
+                style += `background:${b.color};`;
+            }
+
+            // Drop events only on assign tab
+            const dropAttrs = droppable
+                ? `ondragover="cellDragOver(event,'${code}')" ondragleave="cellDragLeave(event,'${code}')" ondrop="cellDrop(event,'${code}')" onclick="cellClick('${code}')"`
+                : '';
+
+            cvs.innerHTML += `<div class="${cls}" id="cell-${containerId}-${code}" style="${style}" data-code="${code}" ${dropAttrs}>${inner}</div>`;
+        }
+    }
+}
+
+// ── Cell drag handlers ───────────────────────────────────────
+function cellDragOver(e, code) {
+    e.preventDefault();
+    const b = boardsData[code];
+    if (b && b.submission_id) { e.dataTransfer.dropEffect='none'; return; }
+    e.dataTransfer.dropEffect = 'move';
+    document.getElementById(`cell-gridCanvas-${code}`)?.classList.add('drag-over-cell');
+}
+function cellDragLeave(e, code) {
+    document.getElementById(`cell-gridCanvas-${code}`)?.classList.remove('drag-over-cell');
+}
+function cellDrop(e, code) {
+    e.preventDefault();
+    document.getElementById(`cell-gridCanvas-${code}`)?.classList.remove('drag-over-cell');
+    if (!dragSubId) { showToast('Drag a poster card from the list'); return; }
+    const b = boardsData[code];
+    if (!b || !b.id) { showToast('Board spot not found'); return; }
+    if (b.submission_id) { showToast('This spot is already occupied'); return; }
+    doAssign(dragSubId, b.id, code, dragSubColor);
+}
+
+// ── Click fallback (for non-drag users) ─────────────────────
+let selectedPosterId = null, selectedPosterColor = '#2d8a4e', selectedPosterTitle = '';
+function cellClick(code) {
+    if (dragSubId) return; // handled by drop
+    if (!selectedPosterId) { showToast('Select a poster or drag one onto the grid'); return; }
+    const b = boardsData[code];
+    if (!b || !b.id) { showToast('Board spot not found'); return; }
+    if (b.submission_id) { showToast('This spot is already occupied'); return; }
+    if (confirm(`Place "${selectedPosterTitle.substring(0,40)}" at ${code} (${selectedW}×${selectedH})?`)) {
+        doAssign(selectedPosterId, b.id, code, selectedPosterColor);
+    }
+}
+
+function doAssign(subId, boardId, code, color) {
+    document.getElementById('assign_sub_id').value   = subId;
+    document.getElementById('assign_board_id').value = boardId;
+    document.getElementById('assign_w').value        = selectedW;
+    document.getElementById('assign_h').value        = selectedH;
+    document.getElementById('assign_color').value    = color;
+    document.getElementById('assignForm').submit();
+}
+
+// ── Size + poster selection (click mode) ─────────────────────
+function selectSize(w,h,btn) {
+    selectedW=w; selectedH=h;
+    document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+// ── Tab switching ─────────────────────────────────────────────
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(t=>t.style.display='none');
+    document.querySelectorAll('.poster-tab').forEach(t=>t.classList.remove('active'));
+    document.getElementById('tab-'+tab).style.display='';
+    document.querySelectorAll('.poster-tab')[['poster','board','theme'].indexOf(tab)].classList.add('active');
+    if (tab==='poster') buildGrid('gridCanvas',  'gridColHeaders',  true);
+    if (tab==='board')  buildGrid('boardCanvas', 'boardColHeaders', false);
+    if (tab==='theme')  buildThemeGrid();
+}
+
+// ── Theme / Zone paint ────────────────────────────────────────
+let paintTrackId = null, paintColor = null, isPainting = false;
+const paintedCodes = new Set();
+
+function selectPaintTrack(tid, color, btn) {
+    paintTrackId = tid; paintColor = color;
+    document.querySelectorAll('.paint-track-btn').forEach(b => {
+        b.classList.remove('active-paint');
+        b.style.borderColor = 'transparent';
+        b.style.background  = 'var(--surface2)';
+    });
+    btn.classList.add('active-paint');
+    btn.style.borderColor = color;
+    btn.style.background  = color + '22';
+    document.getElementById('paintStatus').textContent = 'Click or drag cells to paint.';
+    document.getElementById('saveZoneBtn').disabled = false;
+    buildThemeGrid();
+}
+
+function clearPaint() {
+    paintedCodes.clear();
+    document.getElementById('paintStatus').textContent = 'Selection cleared.';
+    buildThemeGrid();
+}
+
+function buildThemeGrid() {
+    const hdr = document.getElementById('themeColHeaders');
+    const cvs = document.getElementById('themeCanvas');
+    if (!hdr || !cvs) return;
+
+    hdr.style.gridTemplateColumns = `22px repeat(${COLS}, 58px)`;
+    hdr.innerHTML = '<div></div>' + LETTERS.map(l=>`<div class="col-header">${l}</div>`).join('');
+
+    cvs.style.gridTemplateColumns = `22px repeat(${COLS}, 58px)`;
+    cvs.innerHTML = '';
+
+    const absorbed = new Set();
+    for (let r = 1; r <= ROWS; r++) {
+        cvs.innerHTML += `<div class="row-label">${r}</div>`;
+        for (let c = 0; c < COLS; c++) {
+            const code = `${LETTERS[c]}-${r}`;
+            if (absorbed.has(code)) { cvs.innerHTML += `<div style="display:none;"></div>`; continue; }
+            const b = boardsData[code];
+            const w = b ? (b.cell_width||1) : 1;
+            const h = b ? (b.cell_height||1) : 1;
+            for (let dr=0; dr<h; dr++) for (let dc=0; dc<w; dc++) {
+                if (dr===0 && dc===0) continue;
+                const ar=r+dr, ac=c+dc;
+                if (ar<=ROWS && ac<COLS) absorbed.add(`${LETTERS[ac]}-${ar}`);
+            }
+            const bg      = paintedCodes.has(code) ? paintColor : (b ? b.color : '#d0cbc4');
+            const outline = paintedCodes.has(code) ? 'outline:3px solid rgba(255,255,255,.7);outline-offset:-3px;' : '';
+            cvs.innerHTML += `<div class="grid-cell" id="tcell-${code}"
+                style="grid-column:span ${w};grid-row:span ${h};background:${bg};cursor:${paintTrackId?'crosshair':'default'};${outline}"
+                data-code="${code}"
+                onmousedown="paintStart('${code}')"
+                onmouseenter="paintMove('${code}')"
+                onmouseup="isPainting=false">
+                <span style="opacity:.5;font-size:9px;">${code}</span>
+            </div>`;
+        }
+    }
+    cvs.addEventListener('selectstart', e => e.preventDefault());
+}
+
+function paintStart(code) {
+    if (!paintTrackId) { showToast('Select a theme first'); return; }
+    isPainting = true; togglePaint(code);
+}
+function paintMove(code) { if (isPainting && paintTrackId) togglePaint(code); }
+function togglePaint(code) {
+    if (paintedCodes.has(code)) paintedCodes.delete(code);
+    else paintedCodes.add(code);
+    const cell = document.getElementById('tcell-'+code);
+    if (cell) {
+        cell.style.background = paintedCodes.has(code) ? paintColor : (boardsData[code] ? boardsData[code].color : '#d0cbc4');
+        cell.style.outline    = paintedCodes.has(code) ? '3px solid rgba(255,255,255,.7)' : '';
+        cell.style.outlineOffset = paintedCodes.has(code) ? '-3px' : '';
+    }
+    document.getElementById('paintStatus').textContent = `${paintedCodes.size} cell(s) selected.`;
+}
+document.addEventListener('mouseup', () => { isPainting = false; });
+
+async function saveZone() {
+    if (!paintTrackId || paintedCodes.size === 0) { showToast('Paint some cells first'); return; }
+    const btn = document.getElementById('saveZoneBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+        const res  = await fetch('/posters/paint-zone', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({codes:[...paintedCodes], track_id: paintTrackId})
+        });
+        const json = await res.json();
+        if (res.ok) {
+            json.updated.forEach(code => {
+                if (boardsData[code]) boardsData[code].color = json.color;
+                else boardsData[code] = {color: json.color};
+            });
+            showToast(`Saved — ${json.updated.length} cell(s) updated`);
+            paintedCodes.clear();
+            buildThemeGrid();
+        } else { showToast('Error: '+(json.error||'Save failed')); }
+    } catch { showToast('Network error'); }
+    btn.disabled = false; btn.textContent = '💾 Save Zones';
+}
+
+function changeBoardSize(val) { window.location.href='/posters?size='+val+'&tab={{ active_tab }}'; }
+
+// ── Init ─────────────────────────────────────────────────────
+buildGrid('gridCanvas',  'gridColHeaders',  true);
+buildGrid('boardCanvas', 'boardColHeaders', false);
+buildThemeGrid();
+
+{% if active_tab == 'board' %}
+document.getElementById('tab-poster').style.display='none';
+document.getElementById('tab-board').style.display='';
+document.getElementById('tab-theme').style.display='none';
+{% elif active_tab == 'theme' %}
+document.getElementById('tab-poster').style.display='none';
+document.getElementById('tab-board').style.display='none';
+document.getElementById('tab-theme').style.display='';
+{% else %}
+document.getElementById('tab-poster').style.display='';
+document.getElementById('tab-board').style.display='none';
+document.getElementById('tab-theme').style.display='none';
+{% endif %}
+</script>
+{% endblock %}

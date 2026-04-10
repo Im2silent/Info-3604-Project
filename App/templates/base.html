@@ -1,19 +1,338 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Conference Scheduler</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Principal's Research Awards & Festival 2025{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f4f1ec;
+            --surface: #ffffff;
+            --surface2: #f0ede6;
+            --border: #ddd8cf;
+            --text: #1a1816;
+            --text-muted: #6b6560;
+            --accent: #1c3a5e;
+            --accent2: #c8932a;
+            --sidebar-w: 220px;
+            --radius: 8px;
+            --shadow: 0 1px 4px rgba(0,0,0,0.10);
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* --- Sidebar --- */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--accent);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 100;
+            padding: 0;
+        }
+        .sidebar-logo {
+            padding: 20px 18px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+        }
+        .sidebar-logo img {
+            width: 52px; height: 52px;
+            border-radius: 50%;
+            background: #fff;
+            display: block;
+            margin-bottom: 10px;
+        }
+        .sidebar-logo .logo-placeholder {
+            width: 52px; height: 52px;
+            border-radius: 50%;
+            background: var(--accent2);
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'DM Serif Display', serif;
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .sidebar-logo h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 13px;
+            line-height: 1.3;
+            color: rgba(255,255,255,0.9);
+        }
+        .sidebar-search {
+            padding: 14px 14px 8px;
+        }
+        .sidebar-search input {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 13px;
+            font-family: 'DM Sans', sans-serif;
+            outline: none;
+        }
+        .sidebar-search input::placeholder { color: rgba(255,255,255,0.5); }
+        .sidebar-nav { padding: 8px 0; flex: 1; }
+        .sidebar-nav a {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 18px;
+            color: rgba(255,255,255,0.75);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+        .sidebar-nav a:hover, .sidebar-nav a.active {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+        }
+        .sidebar-nav a .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+        /* Track filter in sidebar */
+        .sidebar-tracks { padding: 8px 14px 16px; border-top: 1px solid rgba(255,255,255,0.12); }
+        .sidebar-tracks h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.45); margin-bottom: 8px; }
+        .track-filter-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 4px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.75);
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .track-filter-item:hover { background: rgba(255,255,255,0.08); }
+        .track-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+        /* --- Main content --- */
+        .main {
+            margin-left: var(--sidebar-w);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky; top: 0; z-index: 50;
+        }
+        .topbar h2 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 22px;
+            color: var(--text);
+        }
+        .topbar-actions { display: flex; gap: 10px; align-items: center; }
+        .topbar-actions .btn-sm {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            border: none;
+            font-weight: 500;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #152d4a; }
+        .btn-gold { background: var(--accent2); color: #fff; }
+        .btn-gold:hover { background: #b07a1a; }
+        .btn-outline { background: transparent; border: 1px solid var(--border) !important; color: var(--text); }
+        .btn-outline:hover { background: var(--surface2); }
+        .btn-danger { background: #c0392b; color: #fff; }
+        .btn-danger:hover { background: #a93226; }
+
+        .page-content { padding: 28px; flex: 1; }
+
+        /* --- Cards & panels --- */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+        .card-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .card-header h3 { font-size: 15px; font-weight: 600; }
+        .card-body { padding: 18px; }
+
+        /* --- Flash messages --- */
+        .flash-messages { padding: 0 28px; margin-top: 14px; }
+        .flash { padding: 10px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
+        .flash-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .flash-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .flash-info { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+
+        /* --- Forms --- */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'DM Sans', sans-serif;
+            background: var(--surface);
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            border-color: var(--accent);
+        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+        /* --- Modals --- */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--surface);
+            border-radius: 10px;
+            width: 520px;
+            max-width: 95vw;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .modal-header h3 { font-size: 16px; font-weight: 600; }
+        .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); }
+        .modal-body { padding: 22px; }
+        .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+
+        /* --- Badges --- */
+        .badge {
+            display: inline-block; padding: 2px 8px;
+            border-radius: 20px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .badge-green { background: #d4edda; color: #155724; }
+        .badge-red { background: #f8d7da; color: #721c24; }
+        .badge-blue { background: #cce5ff; color: #004085; }
+        .badge-gray { background: #e2e3e5; color: #383d41; }
+        .badge-gold { background: #fff3cd; color: #856404; }
+
+        /* --- Tables --- */
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { padding: 10px 14px; text-align: left; font-weight: 600; color: var(--text-muted); border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--surface2); }
+
+        /* --- Misc --- */
+        .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+        .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: var(--text); color: #fff;
+            padding: 12px 20px; border-radius: 8px;
+            font-size: 14px; z-index: 9999;
+            display: none; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+        .toast.show { display: block; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+    {% block head %}{% endblock %}
 </head>
 <body>
 
-<nav>
-    <h2>Conference System</h2>
-</nav>
+<aside class="sidebar">
+    <div class="sidebar-logo">
+        <div class="logo-placeholder">PRA</div>
+        <h1>Principal's Research Awards & Festival 2025</h1>
+    </div>
+    <div class="sidebar-search">
+        <input type="text" placeholder="Search..." id="globalSearch">
+    </div>
+    <nav class="sidebar-nav">
+        <a href="/schedule" class="{% if active_page == 'schedule' %}active{% endif %}">
+            <span class="nav-icon">📅</span> Schedule
+        </a>
+        <a href="/posters" class="{% if active_page == 'posters' %}active{% endif %}">
+            <span class="nav-icon">🗂</span> Posters
+        </a>
+        <a href="/checkin" class="{% if active_page == 'checkin' %}active{% endif %}">
+            <span class="nav-icon">✅</span> Check-In
+        </a>
+    </nav>
+    <div class="sidebar-tracks">
+        <h4>Themes</h4>
+        {% for track in all_tracks %}
+        <div class="track-filter-item" onclick="filterByTrack({{ track.id }})">
+            <span class="track-dot" style="background:{{ track.color }}"></span>
+            <span title="{{ track.name }}">{{ track.name[:30] }}{% if track.name|length > 30 %}…{% endif %}</span>
+        </div>
+        {% endfor %}
+    </div>
+</aside>
 
-<div class="container">
-    {% block content %}{% endblock %}
+<div class="main">
+    <div class="topbar">
+        <h2>{% block page_title %}Conference Management{% endblock %}</h2>
+        <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-messages">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    <div class="page-content">
+        {% block content %}{% endblock %}
+    </div>
 </div>
 
-<script src="/static/script.js"></script>
+<div class="toast" id="toast"></div>
+
+<script>
+function showToast(msg, dur=2800) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), dur);
+}
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function filterByTrack(trackId) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('track_id', trackId);
+    window.location.href = url.toString();
+}
+// Global search - simple client side filter
+document.getElementById('globalSearch').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('[data-searchable]').forEach(el => {
+        el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+</script>
+{% block scripts %}{% endblock %}
 </body>
 </html>
