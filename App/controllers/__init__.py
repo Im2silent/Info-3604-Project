@@ -1,18 +1,15 @@
-from .initialize import *
+from .auth_controller import auth_bp
+from .checkin_controller import checkin_bp
+from .poster_controller import poster_bp
+from .review_controller import review_bp
+from .schedule_controller import schedule_bp
+from .submission_controller import submission_bp
 
-from .user import (
-    create_user,
-    get_user,
-    get_all_users,
-    user_login,
-    user_logout
-)
-
-__all__ = [
-    # user
-    "create_user",
-    "get_user",
-    "get_all_users",
-    "user_login",
-    "user_logout"
+blueprints = [
+    auth_bp,
+    checkin_bp,
+    poster_bp,
+    review_bp,
+    schedule_bp,
+    submission_bp,
 ]
