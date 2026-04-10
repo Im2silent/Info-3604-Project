@@ -11,10 +11,8 @@ class User(db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(256), nullable=False)
     logged_in = db.Column(db.Boolean, nullable=False, default=False)
-
     role = db.Column(db.String(50), nullable=False)
     #roles e.g ADMIN, REGULAR_USER
-
     bio = db.Column(db.Text)
     profile_picture = db.Column(db.String(256))
 

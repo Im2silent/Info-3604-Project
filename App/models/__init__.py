@@ -2,7 +2,6 @@ from .user import User
 from .checkin import CheckIn
 from .judging import Judging
 from .poster_assignment import PosterAssignment
-
 from .poster_board import PosterBoard
 from .review import Review
 from .schedule import Schedule
